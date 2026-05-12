@@ -1,0 +1,69 @@
+// ============================================================
+// realMap 프로젝트 빌드 설정
+// DID 기반 상호 무페이 서비스 교환 평판 플랫폼
+// 2026 블록체인 & AI 해커톤 출품작
+// ============================================================
+
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.5'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.realmap'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '17'
+
+// Lombok 어노테이션 프로세서 설정
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // --- 웹 MVC (REST API 서버) ---
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // --- JPA / 데이터베이스 ORM ---
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+    // --- Spring Security (JWT 인증 필터 적용) ---
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // --- 입력 유효성 검사 (Bean Validation / @NotBlank, @Min 등) ---
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // --- WebClient: OmniOne CX trans API 호출 (비동기 HTTP 클라이언트) ---
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    // --- H2 인메모리 데이터베이스 (개발/해커톤 데모용) ---
+    runtimeOnly 'com.h2database:h2'
+    // --- MySQL 드라이버 (Railway 운영 환경) ---
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // --- JWT 라이브러리 (JJWT 0.11.5) ---
+    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+    // --- Web3j: OmniOne Chain(이더리움 호환) 트랜잭션 서명 + ABI 인코딩 ---
+    // 선택과제2: OmniOne Chain에 Sentiment 해시 앵커링 (+5% 가산점)
+    implementation 'org.web3j:core:4.10.3'
+
+    // --- Lombok: 보일러플레이트 코드 자동 생성 ---
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // --- 테스트 의존성 ---
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

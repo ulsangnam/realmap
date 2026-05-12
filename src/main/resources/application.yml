@@ -1,0 +1,86 @@
+# ============================================================
+# realMap 애플리케이션 설정
+# DID 기반 상호 무페이 서비스 교환 평판 플랫폼
+# ============================================================
+
+spring:
+  # --- 웹 애플리케이션 타입 ---
+  # WebFlux(webflux)와 WebMVC(servlet)가 동시 존재할 때 충돌 방지
+  # WebClient 사용을 위해 webflux 의존성을 추가했지만, 서버는 Servlet 기반으로 동작
+  main:
+    web-application-type: servlet
+
+  # --- 데이터소스 설정 (H2 인메모리 DB - 개발/데모용) ---
+  datasource:
+    url: jdbc:h2:mem:realmapdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  # --- H2 콘솔 설정 (브라우저에서 DB 확인용: http://localhost:8080/h2-console) ---
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # --- JPA / Hibernate 설정 ---
+  jpa:
+    hibernate:
+      # create-drop: 애플리케이션 시작 시 스키마 생성, 종료 시 삭제 (데모용)
+      # 운영 환경에서는 validate 또는 none 으로 변경할 것
+      ddl-auto: create-drop
+    show-sql: true          # 실행되는 SQL 쿼리를 콘솔에 출력
+    properties:
+      hibernate:
+        format_sql: true    # 출력 SQL을 들여쓰기로 가독성 향상
+        dialect: org.hibernate.dialect.H2Dialect
+
+# --- 서버 포트 ---
+server:
+  port: 8080
+
+# --- Naver Maps ---
+naver:
+  map:
+    client-id: 7ekmq3skek
+
+# --- JWT 설정 ---
+jwt:
+  # 서명 비밀 키: 운영 환경에서는 환경변수 또는 Vault로 관리할 것
+  secret: realMapSuperSecretKeyForJwtSigningMustBeAtLeast256BitsLong2026Hackathon
+  # 토큰 만료 시간: 24시간 (밀리초 단위)
+  expiration-ms: 86400000
+
+# --- OmniOne 설정 (CX: 행안부 모바일 신분증 + Chain: 선택과제2 가산점 +5%) ---
+omnione:
+  # OmniOne CX (행안부 모바일 신분증) API
+  cx:
+    # 해커톤 가이드북 25페이지: trans API 엔드포인트
+    # OACX 콜백으로 받은 token 을 이 URL 에 전달하면 DID + 주소 정보를 반환
+    trans-api-url: https://cx.raonsecure.co.kr:18543/oacx/api/v1.0/trans
+    # API 키: 해커톤 행사 당일 발급받은 키로 교체
+    api-key: HACKATHON_API_KEY_PLACEHOLDER
+    # 목 모드: true 로 설정하면 OmniOne 서버 미접속 상태에서도 더미 DID를 반환 (데모/테스트용)
+    mock-mode: true
+  # OmniOne Chain (Ethereum 호환 체인, REST API + API Key 방식)
+  chain:
+    # OmniOne Chain RPC 엔드포인트 (해커톤 참가 시 발급받은 URL로 교체)
+    rpc-url: https://chain.omnione.net/rpc
+    # API Key (해커톤 행사 당일 발급)
+    api-key: HACKATHON_CHAIN_API_KEY_PLACEHOLDER
+    # 배포된 SentimentRegistry 컨트랙트 주소 (배포 후 입력)
+    contract-address: "0x0000000000000000000000000000000000000000"
+    # 서비스 EOA 개인키 (트랜잭션 서명용 — 운영에서 Vault/HSM으로 관리)
+    private-key: "0x0000000000000000000000000000000000000000000000000000000000000001"
+    # 비활성화 시 체인 앵커링 건너뜀 (미설정 체인 환경에서도 나머지 기능 정상 작동)
+    enabled: false
+    # Chain ID (OmniOne Chain 고유값 — 해커톤 참가 시 확인)
+    chain-id: 1007
+
+# --- 로깅 설정 ---
+logging:
+  level:
+    com.realmap: DEBUG                          # realMap 전체 패키지 DEBUG 레벨
+    org.springframework.security: DEBUG          # Security 필터 체인 디버그
+    org.hibernate.SQL: DEBUG                     # SQL 쿼리 디버그
+    org.hibernate.type.descriptor.sql: TRACE     # SQL 파라미터 바인딩 값 출력

@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>realMap — DID 기반 서비스 교환</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗺</text></svg>">
+<script src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=7ekmq3skek&submodules=geocoder"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f0c29;--card:rgba(255,255,255,0.05);--border:rgba(255,255,255,0.1);
+  --accent:#00d4ff;--accent2:#a855f7;--text:#e8e8e8;--text2:#9b9bc4;
+  --ok:#10b981;--warn:#f59e0b;--bad:#ef4444;--r:14px;
+  --shadow:0 8px 32px rgba(0,0,0,0.45);
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:linear-gradient(135deg,#0f0c29 0%,#302b63 55%,#24243e 100%) fixed;color:var(--text);min-height:100vh}
+
+/* NAV — 하단 탭 바 (모바일 최적화) */
+#nav{position:fixed;bottom:0;left:0;right:0;z-index:100;display:flex;align-items:stretch;background:rgba(15,12,41,.97);backdrop-filter:blur(14px);border-top:1px solid var(--border);padding-bottom:env(safe-area-inset-bottom,0)}
+.nb{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 2px;background:transparent;border:none;color:var(--text2);cursor:pointer;font-size:1.2rem;min-height:52px;transition:color .2s}
+.nb span{font-size:.6rem;font-weight:600;letter-spacing:.3px}
+.nb:hover,.nb.on{color:var(--accent)}
+.nb-out{color:var(--bad)}
+.nb-out:hover{color:var(--bad)}
+
+/* PAGES */
+.page{padding:16px 16px 80px}
+.hidden{display:none!important}
+
+/* LOGIN */
+#pg-login{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 16px}
+.hero{text-align:center;margin-bottom:44px}
+.hero h1{font-size:3.8rem;font-weight:900;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-2px}
+.hero p{color:var(--text2);margin-top:8px;font-size:1rem}
+.lcard{background:var(--card);border:1px solid var(--border);backdrop-filter:blur(20px);border-radius:var(--r);padding:36px;width:100%;max-width:430px;box-shadow:var(--shadow)}
+.lcard h2{font-size:1.2rem;margin-bottom:22px}
+
+/* FORM */
+.f{margin-bottom:14px}
+.f label{display:block;font-size:.75rem;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+.f input,.f select,.f textarea{width:100%;background:rgba(255,255,255,.07);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:9px;font-size:.92rem;outline:none;transition:border-color .2s}
+.f input:focus,.f select:focus,.f textarea:focus{border-color:var(--accent)}
+.f select option{background:#1a1740}
+.f textarea{resize:vertical;min-height:76px}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:11px 18px;border-radius:9px;font-size:.88rem;font-weight:600;cursor:pointer;border:none;transition:all .2s;min-height:44px}
+.btn-p{background:linear-gradient(135deg,var(--accent),#0088bb);color:#fff;width:100%;justify-content:center;padding:11px}
+.btn-p:hover{opacity:.85;transform:translateY(-1px)}
+.btn-s{background:rgba(255,255,255,.08);color:var(--text);border:1px solid var(--border)}
+.btn-s:hover{background:rgba(255,255,255,.14)}
+.btn-ok{background:var(--ok);color:#fff}
+.btn-ok:hover{opacity:.85}
+.btn-bad{background:var(--bad);color:#fff}
+.btn-bad:hover{opacity:.85}
+.btn-pu{background:var(--accent2);color:#fff}
+.btn-pu:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+
+/* CARD */
+.card{background:var(--card);border:1px solid var(--border);backdrop-filter:blur(12px);border-radius:var(--r);padding:22px;box-shadow:var(--shadow)}
+
+/* GRID */
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(auto-fill,minmax(270px,1fr))}
+
+/* PAGE HEADER */
+.ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:26px}
+.ph h2{font-size:1.5rem;font-weight:700}
+
+/* MEMBER CARD */
+.mc{flex-direction:column;gap:11px;cursor:pointer;transition:transform .2s,border-color .2s}
+.mc:hover{transform:translateY(-3px);border-color:var(--accent)}
+.av{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.4rem;background:linear-gradient(135deg,var(--accent),var(--accent2));flex-shrink:0}
+.mn{font-size:.97rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mr{font-size:.78rem;color:var(--text2)}
+.md{font-size:.83rem;color:var(--text2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mf{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:.72rem;font-weight:600}
+.b-pv{background:rgba(124,58,237,.22);color:#a78bfa;border:1px solid #7c3aed}
+.b-rc{background:rgba(8,145,178,.22);color:#38bdf8;border:1px solid #0891b2}
+.b-bt{background:rgba(5,150,105,.22);color:#6ee7b7;border:1px solid #059669}
+.b-rq{background:rgba(217,119,6,.22);color:#fbbf24;border:1px solid #d97706}
+.b-ac{background:rgba(37,99,235,.22);color:#93c5fd;border:1px solid #2563eb}
+.b-cp{background:rgba(5,150,105,.22);color:#6ee7b7;border:1px solid #059669}
+.b-cx{background:rgba(107,114,128,.18);color:#9ca3af;border:1px solid #6b7280}
+
+/* RATING */
+.stars{color:#f59e0b;letter-spacing:1px}
+.rat{display:flex;align-items:center;gap:5px;font-size:.83rem}
+.rat-n{font-weight:700;font-size:.97rem;color:#f59e0b}
+.rat-c{color:var(--text2);font-size:.78rem}
+
+/* MATCH ITEM */
+.mi{flex-direction:column;gap:9px;cursor:pointer;transition:border-color .2s}
+.mi:hover{border-color:var(--accent)}
+.mih{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mip{font-size:.88rem;font-weight:600}
+.mis{font-size:.79rem;color:var(--text2);line-height:1.5}
+.mim{display:flex;align-items:center;gap:10px;font-size:.77rem;color:var(--text2)}
+
+/* DETAIL */
+.dg{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
+@media(max-width:560px){.dg{grid-template-columns:1fr}}
+.dl{font-size:.73rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.dv{font-size:.92rem;font-weight:500}
+
+/* ACTIONS */
+.acts{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+
+/* STATS */
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-bottom:26px}
+.sc{text-align:center;padding:18px}
+.sn{font-size:1.9rem;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sl{font-size:.78rem;color:var(--text2);margin-top:3px}
+
+/* REVIEW */
+.rv{flex-direction:column;gap:9px}
+.rvh{display:flex;align-items:center;justify-content:space-between}
+.rvr{font-size:.88rem;font-weight:600}
+.rvc{font-size:.88rem;color:var(--text2);line-height:1.6;font-style:italic}
+.rvm{font-size:.76rem;color:var(--text2)}
+
+/* MODAL — 하단 시트 (모바일 최적화) */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(5px);z-index:200;display:flex;align-items:flex-end}
+.md-box{background:#1a1740;border:1px solid var(--border);border-radius:20px 20px 0 0;padding:24px 20px 32px;width:100%;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow)}
+.md-box h3{font-size:1.1rem;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+
+/* STAR SELECTOR */
+.ss{display:flex;gap:6px;font-size:1.7rem;cursor:pointer;user-select:none}
+.ss span{color:#374151;transition:color .1s}
+.ss span.on{color:#f59e0b}
+
+/* TOAST */
+#tc{position:fixed;bottom:76px;right:14px;z-index:999;display:flex;flex-direction:column;gap:7px}
+.toast{padding:11px 18px;border-radius:9px;font-size:.88rem;font-weight:500;max-width:300px;animation:si .3s ease;box-shadow:var(--shadow)}
+.t-ok{background:var(--ok);color:#fff}
+.t-err{background:var(--bad);color:#fff}
+.t-info{background:#2563eb;color:#fff}
+@keyframes si{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* DID AUTH */
+.did-step{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.did-step-num{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;flex-shrink:0;background:rgba(255,255,255,.08);color:var(--text2);border:1px solid var(--border)}
+.did-step-num.done{background:var(--ok);color:#fff;border-color:var(--ok)}
+.did-step-num.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.did-status{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:20px;font-size:.82rem;font-weight:600}
+.ds-wait{background:rgba(255,255,255,.06);color:var(--text2);border:1px solid var(--border)}
+.ds-loading{background:rgba(0,212,255,.1);color:var(--accent);border:1px solid rgba(0,212,255,.3)}
+.ds-ok{background:rgba(16,185,129,.15);color:var(--ok);border:1px solid rgba(16,185,129,.4)}
+.ds-fail{background:rgba(239,68,68,.12);color:var(--bad);border:1px solid rgba(239,68,68,.3)}
+#oacx-qr-box{min-height:180px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.04);border:1px dashed var(--border);border-radius:12px;margin:14px 0;font-size:.85rem;color:var(--text2);flex-direction:column;gap:8px}
+#oacx-qr-box iframe,#oacx-qr-box canvas{border-radius:8px}
+.did-or{text-align:center;color:var(--text2);font-size:.78rem;margin:12px 0;position:relative}
+.did-or::before,.did-or::after{content:'';position:absolute;top:50%;width:calc(50% - 24px);height:1px;background:var(--border)}
+.did-or::before{left:0}.did-or::after{right:0}
+
+/* MISC */
+.empty{text-align:center;padding:56px 20px;color:var(--text2)}
+.ei{font-size:2.6rem;margin-bottom:10px}
+.back{display:inline-flex;align-items:center;gap:5px;color:var(--text2);cursor:pointer;font-size:.88rem;margin-bottom:18px;transition:color .2s}
+.back:hover{color:var(--accent)}
+.tab-btn{flex:1;background:transparent;border:none;color:var(--text2);padding:10px;font-size:.92rem;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .2s}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#302b63;border-radius:3px}
+
+/* MAP */
+.map-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:rgba(15,12,41,.88);backdrop-filter:blur(8px);color:var(--text);font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;box-shadow:var(--shadow)}
+.map-btn:hover{border-color:var(--accent);transform:scale(1.08)}
+.map-btn.on{background:var(--accent);border-color:var(--accent);color:#000}
+.iw{padding:14px;min-width:200px;background:#1a1740;border-radius:10px;color:#e8e8e8;font-family:'Segoe UI',sans-serif}
+.iw-name{font-size:.97rem;font-weight:700;margin-bottom:4px}
+.iw-role{font-size:.75rem;margin-bottom:6px}
+.iw-sd{font-size:.82rem;color:#9b9bc4;margin-bottom:10px;line-height:1.5}
+.iw-stars{color:#f59e0b;font-size:.88rem;margin-bottom:10px}
+.iw-btn{display:block;width:100%;padding:7px;border-radius:7px;border:none;background:linear-gradient(135deg,#00d4ff,#0088bb);color:#fff;font-size:.83rem;font-weight:600;cursor:pointer;text-align:center}
+</style>
+</head>
+<body>
+
+<!-- NAV — 하단 탭 바 -->
+<nav id="nav" class="hidden">
+  <button class="nb" id="nb-map" onclick="goto('map')">🗺<span>지도</span></button>
+  <button class="nb" id="nb-dashboard" onclick="goto('dashboard')">🏠<span>홈</span></button>
+  <button class="nb" id="nb-browse" onclick="goto('browse')">🔍<span>찾기</span></button>
+  <button class="nb" id="nb-matches" onclick="goto('matches')">📋<span>매칭</span></button>
+  <button class="nb" id="nb-reviews" onclick="goto('reviews')">⭐<span>평가</span></button>
+  <button class="nb nb-out" onclick="logout()">⏏<span>로그아웃</span></button>
+</nav>
+
+<div id="tc"></div>
+
+<!-- ════ LOGIN ════ -->
+<div id="pg-login">
+  <div class="hero">
+    <h1>realMap</h1>
+    <p>내 서비스를 나누고, 신뢰로 연결되는 교환 플랫폼</p>
+  </div>
+  <div class="lcard">
+    <!-- 탭: 로그인 / 회원가입 / 모바일 신분증 -->
+    <div style="display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border)">
+      <button class="tab-btn active" id="tab-login" onclick="switchTab('login')">로그인</button>
+      <button class="tab-btn" id="tab-reg" onclick="switchTab('reg')">회원가입</button>
+      <button class="tab-btn" id="tab-did" onclick="switchTab('did')" style="color:var(--accent);flex:1.3">
+        📱 모바일 신분증
+      </button>
+    </div>
+
+    <!-- 로그인 폼 -->
+    <form id="lf-login" onsubmit="doEmailLogin(event)">
+      <div class="f">
+        <label>이메일</label>
+        <input name="email" type="email" placeholder="example@email.com" required autocomplete="email">
+      </div>
+      <div class="f">
+        <label>비밀번호</label>
+        <input name="password" type="password" placeholder="비밀번호 입력" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-p" style="margin-top:4px">
+        <span id="lbt-login">로그인</span>
+      </button>
+      <p style="text-align:center;margin-top:14px;font-size:.82rem;color:var(--text2)">
+        계정이 없으신가요? <span onclick="switchTab('reg')" style="color:var(--accent);cursor:pointer">회원가입</span>
+      </p>
+      <div class="did-or">또는</div>
+      <button type="button" class="btn btn-s" onclick="switchTab('did')" style="width:100%;justify-content:center;border-color:rgba(0,212,255,.4);color:var(--accent)">
+        📱 모바일 신분증으로 로그인
+      </button>
+    </form>
+
+    <!-- 회원가입 폼 -->
+    <form id="lf-reg" onsubmit="doRegister(event)" class="hidden">
+      <div class="f">
+        <label>이메일</label>
+        <input name="email" type="email" placeholder="example@email.com" required autocomplete="email">
+      </div>
+      <div class="f">
+        <label>비밀번호 <span style="color:var(--text2);font-weight:400">(6자 이상)</span></label>
+        <input name="password" type="password" placeholder="비밀번호 설정" required autocomplete="new-password" minlength="6">
+      </div>
+      <div class="f">
+        <label>이름 / 닉네임</label>
+        <input name="nickname" placeholder="예: 김민준" required>
+      </div>
+      <div class="f">
+        <label>나는 어떤 사람인가요?</label>
+        <select name="role">
+          <option value="BOTH">제공도 하고 받기도 해요</option>
+          <option value="PROVIDER">주로 서비스를 제공해요</option>
+          <option value="RECEIVER">주로 서비스를 받고 싶어요</option>
+        </select>
+      </div>
+      <div class="f">
+        <label>내가 줄 수 있는 서비스 <span style="color:var(--text2);font-weight:400">(선택)</span></label>
+        <textarea name="sd" placeholder="예: 사진 촬영, 번역, 코딩 과외, 요리 레시피 공유..."></textarea>
+      </div>
+      <button type="submit" class="btn btn-p" style="margin-top:4px">
+        <span id="lbt-reg">가입하기</span>
+      </button>
+      <p style="text-align:center;margin-top:14px;font-size:.82rem;color:var(--text2)">
+        이미 계정이 있으신가요? <span onclick="switchTab('login')" style="color:var(--accent);cursor:pointer">로그인</span>
+      </p>
+    </form>
+
+    <!-- ════ 모바일 신분증 (OmniOne CX) ════ -->
+    <div id="lf-did" class="hidden">
+
+      <!-- 상태 표시 -->
+      <div style="display:flex;justify-content:center;margin-bottom:18px">
+        <span class="did-status ds-wait" id="did-status-badge">
+          <span id="did-status-icon">🪪</span>
+          <span id="did-status-text">신분증 인증 대기 중</span>
+        </span>
+      </div>
+
+      <!-- STEP 1: 사용자 정보 (신규 가입 시 사용됨) -->
+      <div class="did-step">
+        <div class="did-step-num active" id="did-sn1">1</div>
+        <div style="font-size:.85rem;color:var(--text2)">
+          닉네임 입력 <span style="font-size:.75rem">(기존 회원이면 무시됩니다)</span>
+        </div>
+      </div>
+      <div class="f">
+        <label>닉네임</label>
+        <input id="did-nickname" placeholder="예: 홍길동" value="">
+      </div>
+      <div class="f">
+        <label>역할</label>
+        <select id="did-role">
+          <option value="BOTH">제공도 하고 받기도 해요</option>
+          <option value="PROVIDER">주로 서비스를 제공해요</option>
+          <option value="RECEIVER">주로 서비스를 받고 싶어요</option>
+        </select>
+      </div>
+      <div class="f">
+        <label>내 서비스 설명 <span style="color:var(--text2);font-weight:400">(선택)</span></label>
+        <textarea id="did-sd" placeholder="예: 사진 촬영, 번역, UI 디자인..."></textarea>
+      </div>
+
+      <!-- STEP 2: 신분증 인증 -->
+      <div class="did-step">
+        <div class="did-step-num" id="did-sn2">2</div>
+        <div style="font-size:.85rem;color:var(--text2)">행안부 모바일 신분증 인증</div>
+      </div>
+
+      <!-- 메인 인증 버튼 -->
+      <button class="btn btn-p" id="did-auth-btn" onclick="startDidAuth()"
+        style="width:100%;justify-content:center;background:linear-gradient(135deg,#00d4ff,#a855f7);font-size:.95rem;padding:14px">
+        📱 모바일 신분증으로 인증하기
+      </button>
+
+      <!-- OACX SDK가 QR 코드를 렌더링할 컨테이너 -->
+      <div id="oacx-qr-box" class="hidden">
+        <span class="spin"></span>
+        <span style="font-size:.8rem">QR 코드 로딩 중...</span>
+      </div>
+
+      <!-- 구분선 -->
+      <div class="did-or" style="margin-top:16px">데모 / 테스트 환경</div>
+
+      <!-- Mock 인증 버튼 (mock-mode: true일 때 사용) -->
+      <button class="btn btn-s" onclick="mockDidAuth()"
+        style="width:100%;justify-content:center;border-color:rgba(168,85,247,.5);color:#a855f7">
+        🧪 테스트 인증 (Mock 모드)
+      </button>
+
+      <p style="font-size:.72rem;color:var(--text2);margin-top:10px;text-align:center;line-height:1.6">
+        테스트 인증은 실제 신분증 없이 임의의 DID를 생성합니다.<br>
+        행사 당일 실제 API 키 적용 시 상단 버튼으로 인증하세요.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MAP ════ -->
+<div id="pg-map" class="hidden" style="position:relative;height:calc(100vh - 60px)">
+  <div id="naver-map" style="width:100%;height:100%"></div>
+
+  <!-- 좌측 컨트롤: 위치·교통·핀 -->
+  <div style="position:absolute;top:12px;left:12px;z-index:10;display:flex;flex-direction:column;gap:8px">
+    <button class="map-btn" onclick="locateMe()" title="내 위치">📍</button>
+    <button class="map-btn" onclick="toggleTraffic()" title="실시간 교통" id="traffic-btn">🚗</button>
+    <button class="map-btn" onclick="refreshMapMarkers()" title="새로고침">🔄</button>
+    <button class="map-btn" onclick="startPinMode()" title="핀 추가" id="pin-mode-btn">📢</button>
+  </div>
+
+  <!-- 상단 검색창 -->
+  <div style="position:absolute;top:12px;left:72px;right:12px;z-index:10">
+    <div style="display:flex;gap:6px">
+      <input id="map-search" placeholder="주소 또는 장소 검색..." onkeydown="if(event.key==='Enter')searchAddress()"
+        style="flex:1;padding:10px 14px;border-radius:24px;border:none;background:rgba(15,12,41,.92);color:#e8e8e8;font-size:.9rem;backdrop-filter:blur(10px);outline:none;min-height:44px">
+      <button class="map-btn" onclick="searchAddress()">🔍</button>
+    </div>
+  </div>
+
+  <!-- 내 위치 등록 + 회원 수 -->
+  <div style="position:absolute;bottom:12px;left:0;right:0;z-index:10;display:flex;justify-content:space-between;align-items:center;padding:0 12px">
+    <div id="map-count" style="background:rgba(15,12,41,.85);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:6px 14px;font-size:.78rem;color:#9b9bc4"></div>
+    <button class="btn btn-p" style="border-radius:24px;padding:10px 16px;font-size:.83rem" onclick="registerMyLocation()">
+      📌 내 위치 등록
+    </button>
+  </div>
+</div>
+
+<!-- ════ DASHBOARD ════ -->
+<div id="pg-dashboard" class="page hidden">
+  <div class="ph">
+    <h2>👋 <span id="d-nick"></span>님</h2>
+    <span id="d-role"></span>
+  </div>
+  <div class="sg">
+    <div class="card sc"><div class="sn" id="d-avg">0.00</div><div class="sl">평균 평판 점수</div></div>
+    <div class="card sc"><div class="sn" id="d-rvc">0</div><div class="sl">받은 평가 수</div></div>
+    <div class="card sc"><div class="sn" id="d-mc">0</div><div class="sl">총 매칭 수</div></div>
+    <div class="card sc"><div class="sn" id="d-cc">0</div><div class="sl">완료된 교환</div></div>
+  </div>
+  <div class="card" style="margin-bottom:18px">
+    <div class="dl">내 서비스 설명</div>
+    <div style="margin-top:6px;color:var(--text2);font-size:.92rem" id="d-sd">-</div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    <button class="btn btn-p" onclick="goto('browse')" style="flex:1;min-width:130px">🔍 교환 상대 찾기</button>
+    <button class="btn btn-s" onclick="goto('matches')" style="flex:1;min-width:130px">📋 내 매칭 목록</button>
+    <button class="btn btn-s" onclick="goto('reviews')" style="flex:1;min-width:130px">⭐ 받은 평가</button>
+  </div>
+</div>
+
+<!-- ════ BROWSE ════ -->
+<div id="pg-browse" class="page hidden">
+  <div class="ph">
+    <h2>회원 찾기</h2>
+    <button class="btn btn-s" onclick="loadMembers()">새로고침</button>
+  </div>
+  <div id="mg" class="grid g2"></div>
+</div>
+
+<!-- ════ MATCHES ════ -->
+<div id="pg-matches" class="page hidden">
+  <div class="ph">
+    <h2>내 매칭</h2>
+    <button class="btn btn-s" onclick="loadMatches()">새로고침</button>
+  </div>
+  <div id="ml" class="grid"></div>
+</div>
+
+<!-- ════ MATCH DETAIL ════ -->
+<div id="pg-match-detail" class="page hidden">
+  <div class="back" onclick="goto('matches')">← 목록으로</div>
+  <div id="mdc"></div>
+</div>
+
+<!-- ════ REVIEWS ════ -->
+<div id="pg-reviews" class="page hidden">
+  <div class="ph">
+    <h2>받은 평가</h2>
+    <button class="btn btn-s" onclick="loadReviews()">새로고침</button>
+  </div>
+  <div id="rl" class="grid g2"></div>
+</div>
+
+<!-- ════ MODAL: 교환 요청 ════ -->
+<div id="m-req" class="mo hidden">
+  <div class="md-box">
+    <h3>서비스 교환 요청</h3>
+    <div class="f">
+      <label>상대방 서비스</label>
+      <div id="req-target" style="color:var(--text2);font-size:.88rem;padding:8px;background:rgba(255,255,255,.05);border-radius:8px;margin-top:2px"></div>
+    </div>
+    <div class="f">
+      <label>내가 제공할 서비스 (이번 교환)</label>
+      <textarea id="req-svc" placeholder="이번 교환에서 내가 제공하는 서비스를 구체적으로 입력하세요" required></textarea>
+    </div>
+    <div class="f">
+      <label>교환 희망 일시 (선택)</label>
+      <input type="datetime-local" id="req-at">
+    </div>
+    <div class="acts">
+      <button class="btn btn-p" onclick="submitReq()">요청 보내기</button>
+      <button class="btn btn-s" onclick="cm('m-req')">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: 수락 ════ -->
+<div id="m-acc" class="mo hidden">
+  <div class="md-box">
+    <h3>서비스 교환 수락</h3>
+    <div class="f">
+      <label>내가 제공할 서비스 (이번 교환)</label>
+      <textarea id="acc-svc" placeholder="수락 시 내가 제공하는 서비스를 구체적으로 입력하세요" required></textarea>
+    </div>
+    <div class="acts">
+      <button class="btn btn-ok" onclick="submitAcc()">✅ 수락</button>
+      <button class="btn btn-s" onclick="cm('m-acc')">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: 평가 ════ -->
+<div id="m-eval" class="mo hidden">
+  <div class="md-box">
+    <h3>상대방 평가하기</h3>
+    <div class="f">
+      <label>평점</label>
+      <div class="ss" id="ss">
+        <span data-v="1">★</span><span data-v="2">★</span><span data-v="3">★</span>
+        <span data-v="4">★</span><span data-v="5">★</span>
+      </div>
+    </div>
+    <div class="f">
+      <label>코멘트</label>
+      <textarea id="eval-c" placeholder="상대방 서비스에 대한 솔직한 평가를 남겨주세요"></textarea>
+    </div>
+    <div class="acts">
+      <button class="btn btn-p" onclick="submitEval()">평가 제출</button>
+      <button class="btn btn-s" onclick="cm('m-eval')">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: 핀 추가 ════ -->
+<div id="m-pin" class="mo hidden">
+  <div class="md-box">
+    <h3>📢 이벤트 핀 추가</h3>
+    <div id="pin-coord-info" style="font-size:.8rem;color:var(--text2);margin-bottom:14px;padding:7px 10px;background:rgba(255,255,255,.05);border-radius:7px"></div>
+    <div class="f">
+      <label>이벤트 내용</label>
+      <textarea id="pin-content" placeholder="예: 여기서 기타 연주 중! 같이 들으실 분 😊" required style="min-height:80px"></textarea>
+    </div>
+    <div class="f">
+      <label>주최기관 <span style="color:var(--text2);font-weight:400">(선택)</span></label>
+      <input id="pin-organizer-name" placeholder="예: 강남구청, ABC 스타트업">
+    </div>
+    <div class="f">
+      <label>주최기관 URL <span style="color:var(--text2);font-weight:400">(선택)</span></label>
+      <input id="pin-organizer-url" type="url" placeholder="https://event.example.com">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="f" style="margin-bottom:0">
+        <label>시작 시간 <span style="color:var(--text2);font-weight:400">(선택)</span></label>
+        <input id="pin-start-time" type="datetime-local">
+      </div>
+      <div class="f" style="margin-bottom:0">
+        <label style="display:flex;align-items:center;gap:6px">
+          종료 시간
+          <label style="font-size:.75rem;color:var(--text2);font-weight:400;display:flex;align-items:center;gap:3px;cursor:pointer;text-transform:none;letter-spacing:0">
+            <input type="checkbox" id="pin-end-unknown" onchange="document.getElementById('pin-end-time').disabled=this.checked" style="width:auto;accent-color:var(--accent)"> 미확인
+          </label>
+        </label>
+        <input id="pin-end-time" type="datetime-local">
+      </div>
+    </div>
+    <div class="f">
+      <label>핀 유지 시간 <span style="color:var(--text2);font-weight:400">(지도에서 사라지는 시간)</span></label>
+      <select id="pin-duration">
+        <option value="30">30분</option>
+        <option value="60" selected>1시간</option>
+        <option value="180">3시간</option>
+        <option value="1440">24시간</option>
+      </select>
+    </div>
+    <div class="f">
+      <label>이벤트 이미지 <span style="color:var(--text2);font-weight:400">(선택 — 핀 아이콘으로 표시)</span></label>
+      <input id="pin-image" type="file" accept="image/jpeg,image/png,image/gif,image/webp"
+        style="background:rgba(255,255,255,.07);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:9px;font-size:.88rem;width:100%">
+    </div>
+    <div style="font-size:.76rem;color:var(--text2);margin-bottom:14px">
+      ⛓ 핀 데이터(사용자ID·좌표·내용·주최기관)는 OmniOne Chain에 앵커링됩니다
+    </div>
+    <div class="acts">
+      <button class="btn btn-p" onclick="submitPin()">📌 핀 등록</button>
+      <button class="btn btn-s" onclick="cancelPinMode()">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ MODAL: 핀 수정 ════ -->
+<div id="m-pin-edit" class="mo hidden">
+  <div class="md-box">
+    <h3>✏️ 핀 수정</h3>
+    <div class="f">
+      <label>이벤트 내용</label>
+      <textarea id="edit-pin-content" style="min-height:80px"></textarea>
+    </div>
+    <div class="f">
+      <label>주최기관</label>
+      <input id="edit-pin-organizer-name" placeholder="주최기관 이름">
+    </div>
+    <div class="f">
+      <label>주최기관 URL</label>
+      <input id="edit-pin-organizer-url" type="url" placeholder="https://...">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="f" style="margin-bottom:0">
+        <label>시작 시간</label>
+        <input id="edit-pin-start-time" type="datetime-local">
+      </div>
+      <div class="f" style="margin-bottom:0">
+        <label style="display:flex;align-items:center;gap:6px">
+          종료 시간
+          <label style="font-size:.75rem;color:var(--text2);font-weight:400;display:flex;align-items:center;gap:3px;cursor:pointer;text-transform:none;letter-spacing:0">
+            <input type="checkbox" id="edit-pin-end-unknown" onchange="document.getElementById('edit-pin-end-time').disabled=this.checked" style="width:auto;accent-color:var(--accent)"> 미확인
+          </label>
+        </label>
+        <input id="edit-pin-end-time" type="datetime-local">
+      </div>
+    </div>
+    <div class="f">
+      <label>유지시간 연장 <span style="color:var(--text2);font-weight:400">(현재 시각 기준 재설정)</span></label>
+      <select id="edit-pin-duration">
+        <option value="">변경 안 함</option>
+        <option value="30">30분</option>
+        <option value="60">1시간</option>
+        <option value="180">3시간</option>
+        <option value="1440">24시간</option>
+      </select>
+    </div>
+    <div class="f">
+      <label>이미지 교체 <span style="color:var(--text2);font-weight:400">(선택 — 새 이미지로 교체)</span></label>
+      <input id="edit-pin-image" type="file" accept="image/jpeg,image/png,image/gif,image/webp"
+        style="background:rgba(255,255,255,.07);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:9px;font-size:.88rem;width:100%">
+    </div>
+    <div class="acts">
+      <button class="btn btn-p" onclick="submitPinEdit()">저장</button>
+      <button class="btn btn-s" onclick="cm('m-pin-edit')">취소</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ─────────────────────────────────────────────────────
+let token = localStorage.getItem('nv_tok');
+let user = null;
+try { user = JSON.parse(localStorage.getItem('nv_u')); } catch(e) {}
+let reqTargetId = null, accMatchId = null, evalMatchId = null, evalScore = 0;
+// ── MAP ───────────────────────────────────────────────────────
+let map = null, trafficLayer = null, mapMarkers = [], pinMarkers = [], mapInited = false;
+// pinMode: 지도 클릭 시 핀 위치 선택 모드 여부
+// pendingPinCoord: 사용자가 클릭한 좌표 (모달 표시 후 submitPin에서 사용)
+let pinMode = false, pendingPinCoord = null;
+
+// ── API ───────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const r = await fetch('/api' + path, {
+    method,
+    headers: Object.assign({'Content-Type':'application/json'}, token ? {'Authorization':'Bearer '+token} : {}),
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (r.status === 204) return null;
+  // 401: 세션 만료 (앱 재시작 후 DB 초기화 등) → 자동 로그아웃
+  if (r.status === 401) {
+    localStorage.removeItem('nv_tok'); localStorage.removeItem('nv_u');
+    token = null; user = null;
+    document.getElementById('nav').classList.add('hidden');
+    document.querySelectorAll('[id^="pg-"]').forEach(e => e.classList.add('hidden'));
+    document.getElementById('pg-login').classList.remove('hidden');
+    toast('err', '세션이 만료됐습니다. 다시 로그인해 주세요.');
+    throw new Error('session_expired');
+  }
+  const d = await r.json().catch(() => null);
+  if (!r.ok) throw new Error((d && (d.message || d.error)) || r.statusText);
+  return d;
+}
+
+function initMap() {
+  if (mapInited) { refreshMapMarkers(); return; }
+  map = new naver.maps.Map('naver-map', {
+    center: new naver.maps.LatLng(37.5665, 126.9780),
+    zoom: 13,
+    mapTypeId: naver.maps.MapTypeId.NORMAL
+  });
+  trafficLayer = new naver.maps.TrafficLayer();
+  // 핀 모드(pinMode=true)일 때만 클릭 좌표를 캡처하여 핀 추가 모달을 표시
+  naver.maps.Event.addListener(map, 'click', e => {
+    if (!pinMode) return;
+    pendingPinCoord = { lat: e.coord.lat(), lng: e.coord.lng() };
+    document.getElementById('pin-coord-info').textContent =
+      `📍 ${pendingPinCoord.lat.toFixed(5)}, ${pendingPinCoord.lng.toFixed(5)}`;
+    document.getElementById('pin-content').value = '';
+    document.getElementById('m-pin').classList.remove('hidden');
+  });
+  mapInited = true;
+  refreshMapMarkers();
+  setInterval(refreshMapMarkers, 30000);
+}
+
+async function refreshMapMarkers() {
+  if (!map) return;
+  try {
+    const ms = await api('GET', '/members');
+    mapMarkers.forEach(({marker, iw}) => { marker.setMap(null); iw.close(); });
+    mapMarkers = [];
+    const located = ms.filter(m => m.lat != null && m.lng != null);
+    document.getElementById('map-count').textContent = `📍 ${located.length}명 지도 표시 중`;
+    located.forEach(m => {
+      const pos = new naver.maps.LatLng(m.lat, m.lng);
+      const isMe = m.id === user?.id;
+      const em = ['🎯','💡','🚀','⚡','🎨','🔥','✨','🌟'][m.id % 8];
+      const marker = new naver.maps.Marker({
+        position: pos,
+        map: map,
+        icon: {
+          content: `<div style="background:${isMe?'var(--accent)':'var(--accent2)'};border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:pointer">${em}</div>`,
+          anchor: new naver.maps.Point(18, 18)
+        }
+      });
+      const avg = parseFloat(m.averageSentimentScore || 0).toFixed(1);
+      const iw = new naver.maps.InfoWindow({
+        content: `<div class="iw">
+          <div class="iw-name">${esc(m.nickname)}${isMe ? ' <span style="color:var(--accent);font-size:.72rem">(나)</span>' : ''}</div>
+          <div class="iw-role">${roleBadge(m.role)} <span style="color:var(--text2);font-size:.75rem">📍 ${esc(m.region || '지역 미설정')}</span></div>
+          <div class="iw-sd">${esc(m.serviceDescription || '서비스 설명 없음')}</div>
+          <div class="iw-stars">${stars(parseFloat(avg))} <span style="color:var(--text2);font-size:.78rem">${avg} (${m.sentimentCount || 0})</span></div>
+          ${!isMe ? `<button class="iw-btn" onclick="openReqModal(${m.id},'${esc(m.serviceDescription||'')}','${esc(m.nickname)}')">교환 요청</button>` : ''}
+        </div>`,
+        borderWidth: 0,
+        backgroundColor: 'transparent',
+        disableAnchor: true
+      });
+      naver.maps.Event.addListener(marker, 'click', () => {
+        if (iw.getMap()) iw.close(); else iw.open(map, marker);
+      });
+      mapMarkers.push({marker, iw});
+    });
+  } catch(err) { toast('err', '마커 로드 실패: ' + err.message); }
+  // 회원 마커 갱신과 함께 핀 마커도 항상 동기화
+  refreshPinMarkers();
+}
+
+function locateMe() {
+  if (!navigator.geolocation) { toast('err', '위치 권한이 없습니다.'); return; }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const ll = new naver.maps.LatLng(pos.coords.latitude, pos.coords.longitude);
+    map.setCenter(ll);
+    map.setZoom(15);
+    toast('ok', '내 위치로 이동했습니다.');
+  }, () => toast('err', '위치 정보를 가져올 수 없습니다.'));
+}
+
+async function registerMyLocation() {
+  if (!navigator.geolocation) { toast('err', '위치 권한이 없습니다.'); return; }
+  navigator.geolocation.getCurrentPosition(async pos => {
+    try {
+      await api('PUT', '/members/location', {lat: pos.coords.latitude, lng: pos.coords.longitude});
+      toast('ok', '📌 내 위치가 지도에 등록됐습니다!');
+      if (map) refreshMapMarkers();
+    } catch(err) { toast('err', err.message); }
+  }, () => toast('err', '위치 정보를 가져올 수 없습니다.'));
+}
+
+function toggleTraffic() {
+  const btn = document.getElementById('traffic-btn');
+  if (trafficLayer.getMap()) {
+    trafficLayer.setMap(null);
+    btn.classList.remove('on');
+  } else {
+    trafficLayer.setMap(map);
+    btn.classList.add('on');
+  }
+}
+
+function searchAddress() {
+  const q = document.getElementById('map-search').value.trim();
+  if (!q) return;
+  naver.maps.Service.geocode({query: q}, (status, res) => {
+    if (status !== naver.maps.Service.Status.OK || !res.v2.addresses.length) {
+      toast('err', '검색 결과가 없습니다.'); return;
+    }
+    const item = res.v2.addresses[0];
+    map.setCenter(new naver.maps.LatLng(parseFloat(item.y), parseFloat(item.x)));
+    map.setZoom(15);
+    toast('info', `📍 ${item.roadAddress || item.jibunAddress}`);
+  });
+}
+
+// ── PIN ───────────────────────────────────────────────────────
+
+/**
+ * 활성 핀을 서버에서 조회하여 지도 마커로 렌더링합니다.
+ * 기존 핀 마커를 제거 후 새로 그립니다.
+ * 오류는 조용히 처리합니다 (지도 로딩을 방해하지 않기 위함).
+ */
+async function refreshPinMarkers() {
+  if (!map) return;
+  try {
+    const pins = await api('GET', '/pins');
+    // 기존 핀 마커 및 인포윈도우 제거
+    pinMarkers.forEach(({marker, iw}) => { marker.setMap(null); if (iw) iw.close(); });
+    pinMarkers = [];
+    pins.forEach(p => {
+      const pos = new naver.maps.LatLng(p.lat, p.lng);
+      const remainMin = Math.max(0, Math.round(p.remainMs / 60000));
+      // 남은 시간 표시: 60분 이상이면 시간/분으로, 미만이면 분으로 표시
+      const timeLabel = remainMin >= 60
+        ? `${Math.floor(remainMin / 60)}시간 ${remainMin % 60}분`
+        : `${remainMin}분`;
+      // 핀 마커 아이콘: 이미지가 있으면 이미지 썸네일, 없으면 주황 📢 아이콘
+      const markerIcon = p.imageUrl
+        ? {
+            content: `<div style="width:46px;height:46px;border-radius:10px;overflow:hidden;border:2px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.6);cursor:pointer"><img src="${esc(p.imageUrl)}" style="width:100%;height:100%;object-fit:cover"></div>`,
+            anchor: new naver.maps.Point(23, 23)
+          }
+        : {
+            content: `<div style="background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:50% 50% 50% 0;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:1rem;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer;transform:rotate(-45deg)"><span style="transform:rotate(45deg)">📢</span></div>`,
+            anchor: new naver.maps.Point(18, 36)
+          };
+      const marker = new naver.maps.Marker({
+        position: pos,
+        map: map,
+        icon: markerIcon
+      });
+      const fmtDt = s => {
+        if (!s) return null;
+        const d = new Date(s);
+        return d.toLocaleDateString('ko-KR',{month:'short',day:'numeric'})
+          + ' ' + d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+      };
+      const startFmt = fmtDt(p.eventStartTime);
+      const endFmt = p.eventEndTime ? fmtDt(p.eventEndTime) : '미확인';
+      const timeRangeHtml = startFmt
+        ? `<div style="font-size:.8rem;margin-bottom:6px;color:#e8e8e8">📅 ${startFmt} ~ ${endFmt}</div>` : '';
+      const organizerHtml = p.organizerName
+        ? `<div style="margin-bottom:6px;font-size:.8rem">
+            🏢 ${p.organizerUrl
+              ? `<a href="${esc(p.organizerUrl)}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">${esc(p.organizerName)}</a>`
+              : esc(p.organizerName)}
+           </div>` : '';
+      const iw = new naver.maps.InfoWindow({
+        content: `<div class="iw">
+          <div class="iw-name">📢 ${esc(p.content)}</div>
+          <div class="iw-role" style="margin-top:4px">👤 ${esc(p.nickname)}</div>
+          ${timeRangeHtml}
+          ${organizerHtml}
+          <div class="iw-sd">⏱ ${timeLabel} 남음</div>
+          <div style="font-size:.72rem;color:#6b7280;margin-bottom:8px">
+            ⛓ ${p.integrityHash ? p.integrityHash.substring(0, 16) + '…' : '앵커링 중'}
+          </div>
+          ${p.memberId !== user?.id
+            ? `<button class="iw-btn" onclick="openReqModalFromPin(${p.memberId},'${esc(p.content)}','${esc(p.nickname)}')">교환 요청</button>`
+            : `<div style="display:flex;gap:6px;margin-top:2px">
+                <button class="iw-btn" style="background:var(--accent2)" onclick="openPinEditModal(${JSON.stringify(p).replace(/"/g,'&quot;')})">✏️ 수정</button>
+                <button class="iw-btn" style="background:#ef4444" onclick="deletePin(${p.id})">삭제</button>
+               </div>`
+          }
+        </div>`,
+        borderWidth: 0,
+        backgroundColor: 'transparent',
+        disableAnchor: true
+      });
+      // 마커 클릭 시 인포윈도우 토글
+      naver.maps.Event.addListener(marker, 'click', () => {
+        if (iw.getMap()) iw.close(); else iw.open(map, marker);
+      });
+      pinMarkers.push({marker, iw});
+    });
+  } catch(err) { /* 핀 로드 실패는 지도 전체 동작에 영향을 주지 않도록 조용히 처리 */ }
+}
+
+/**
+ * 핀 추가 모드를 활성화합니다.
+ * 활성화 시 지도 클릭 이벤트가 핀 위치 선택으로 동작합니다.
+ */
+function startPinMode() {
+  pinMode = true;
+  document.getElementById('pin-mode-btn').classList.add('on');
+  toast('info', '지도를 클릭해서 핀 위치를 선택하세요');
+}
+
+/**
+ * 핀 추가 모드를 취소하고 초기 상태로 되돌립니다.
+ */
+function cancelPinMode() {
+  pinMode = false;
+  pendingPinCoord = null;
+  document.getElementById('pin-mode-btn').classList.remove('on');
+  cm('m-pin');
+}
+
+/**
+ * 핀 추가 모달의 등록 버튼 핸들러.
+ * 이미지 선택 시 먼저 업로드 후 URL을 핀 데이터에 포함합니다.
+ */
+async function submitPin() {
+  const content = document.getElementById('pin-content').value.trim();
+  if (!content) { toast('err', '이벤트 내용을 입력하세요.'); return; }
+  if (!pendingPinCoord) { toast('err', '지도에서 위치를 먼저 선택하세요.'); return; }
+  const durationMinutes = parseInt(document.getElementById('pin-duration').value);
+  const organizerName = document.getElementById('pin-organizer-name').value.trim() || null;
+  const organizerUrl  = document.getElementById('pin-organizer-url').value.trim() || null;
+  const startVal = document.getElementById('pin-start-time').value;
+  const endVal   = document.getElementById('pin-end-time').value;
+  const endUnknown = document.getElementById('pin-end-unknown').checked;
+  // 이미지 업로드: multipart/form-data (Content-Type은 브라우저가 자동 설정)
+  let imageUrl = null;
+  const imgFile = document.getElementById('pin-image').files[0];
+  if (imgFile) {
+    const fd = new FormData();
+    fd.append('file', imgFile);
+    try {
+      const res = await fetch('/api/images/upload', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        body: fd
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast('err', data.error || '이미지 업로드 실패'); return; }
+      imageUrl = data.url;
+    } catch(err) { toast('err', '이미지 업로드 실패: ' + err.message); return; }
+  }
+  try {
+    await api('POST', '/pins', {
+      lat: pendingPinCoord.lat,
+      lng: pendingPinCoord.lng,
+      content,
+      durationMinutes,
+      organizerName,
+      organizerUrl,
+      imageUrl,
+      eventStartTime: startVal || null,
+      eventEndTime: (!endUnknown && endVal) ? endVal : null
+    });
+    cancelPinMode();
+    toast('ok', '📌 핀이 등록됐습니다! ⛓ OmniOne Chain 앵커링 중...');
+    refreshPinMarkers();
+  } catch(err) { toast('err', err.message); }
+}
+
+let editingPinId = null;
+function openPinEditModal(pin) {
+  editingPinId = pin.id;
+  document.getElementById('edit-pin-content').value = pin.content || '';
+  document.getElementById('edit-pin-organizer-name').value = pin.organizerName || '';
+  document.getElementById('edit-pin-organizer-url').value = pin.organizerUrl || '';
+  // datetime-local 형식: "2026-05-11T15:00" (초 이하 제거)
+  document.getElementById('edit-pin-start-time').value =
+    pin.eventStartTime ? pin.eventStartTime.substring(0, 16) : '';
+  const endUnknown = !pin.eventEndTime;
+  document.getElementById('edit-pin-end-unknown').checked = endUnknown;
+  document.getElementById('edit-pin-end-time').disabled = endUnknown;
+  document.getElementById('edit-pin-end-time').value =
+    pin.eventEndTime ? pin.eventEndTime.substring(0, 16) : '';
+  document.getElementById('edit-pin-duration').value = '';
+  document.getElementById('m-pin-edit').classList.remove('hidden');
+}
+
+async function submitPinEdit() {
+  const content = document.getElementById('edit-pin-content').value.trim();
+  const organizerName = document.getElementById('edit-pin-organizer-name').value.trim() || null;
+  const organizerUrl  = document.getElementById('edit-pin-organizer-url').value.trim() || null;
+  const durVal = document.getElementById('edit-pin-duration').value;
+  const durationMinutes = durVal ? parseInt(durVal) : null;
+  const startVal = document.getElementById('edit-pin-start-time').value;
+  const endUnknown = document.getElementById('edit-pin-end-unknown').checked;
+  const endVal = document.getElementById('edit-pin-end-time').value;
+  // 이미지 교체 (선택)
+  let imageUrl = null;
+  const imgFile = document.getElementById('edit-pin-image').files[0];
+  if (imgFile) {
+    const fd = new FormData();
+    fd.append('file', imgFile);
+    try {
+      const res = await fetch('/api/images/upload', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
+        body: fd
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast('err', data.error || '이미지 업로드 실패'); return; }
+      imageUrl = data.url;
+    } catch(err) { toast('err', '이미지 업로드 실패: ' + err.message); return; }
+  }
+  try {
+    await api('PUT', '/pins/' + editingPinId, {
+      content, organizerName, organizerUrl, durationMinutes, imageUrl,
+      eventStartTime: startVal || null,
+      eventEndTime: (!endUnknown && endVal) ? endVal : null
+    });
+    cm('m-pin-edit');
+    toast('ok', '핀이 수정됐습니다.');
+    refreshPinMarkers();
+  } catch(err) { toast('err', err.message); }
+}
+
+/**
+ * 본인 핀을 삭제합니다.
+ * 인포윈도우의 "내 핀 삭제" 버튼에서 호출됩니다.
+ *
+ * @param {number} id 삭제할 핀 ID
+ */
+async function deletePin(id) {
+  if (!confirm('이 핀을 삭제하시겠습니까?')) return;
+  try {
+    // api() 헬퍼는 DELETE + 204 No Content를 처리하므로 직접 fetch 사용
+    await fetch('/api/pins/' + id, {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    toast('info', '핀이 삭제됐습니다.');
+    refreshPinMarkers();
+  } catch(err) { toast('err', err.message); }
+}
+
+/**
+ * 핀 인포윈도우의 "교환 요청" 버튼 핸들러.
+ * 기존 openReqModal()에 위임합니다.
+ *
+ * @param {number} memberId 교환 요청 대상 회원 ID
+ * @param {string} content  핀 이벤트 내용 (서비스 설명 대신 표시)
+ * @param {string} nickname 대상 회원 닉네임
+ */
+function openReqModalFromPin(memberId, content, nickname) {
+  openReqModal(memberId, content, nickname);
+}
+
+// ── NAV ───────────────────────────────────────────────────────
+function goto(s) {
+  document.querySelectorAll('[id^="pg-"]').forEach(e => e.classList.add('hidden'));
+  document.getElementById('pg-'+s).classList.remove('hidden');
+  // 하단 탭 활성 표시
+  document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
+  const nb = document.getElementById('nb-'+s);
+  if (nb) nb.classList.add('on');
+  if (s==='map') initMap();
+  else if (s==='dashboard') loadDashboard();
+  else if (s==='browse') loadMembers();
+  else if (s==='matches') loadMatches();
+  else if (s==='reviews') loadReviews();
+}
+function cm(id) { document.getElementById(id).classList.add('hidden'); }
+
+// ── AUTH ──────────────────────────────────────────────────────
+function switchTab(t) {
+  ['login','reg','did'].forEach(id => {
+    document.getElementById('tab-'+id).classList.toggle('active', t===id);
+    document.getElementById('lf-'+id).classList.toggle('hidden', t!==id);
+  });
+  if (t === 'did') resetDidUi();
+}
+
+// ── DID / OmniOne CX 모바일 신분증 ──────────────────────────
+
+let _didOacxLoaded = false;   // OACX vendor.js 로드 완료 여부
+let _didPendingToken = null;  // OACX 콜백에서 받은 토큰 (임시 보관)
+
+/** DID 탭으로 전환 시 UI 초기 상태 복구 */
+function resetDidUi() {
+  setDidStatus('wait', '🪪', '신분증 인증 대기 중');
+  document.getElementById('did-sn1').className = 'did-step-num active';
+  document.getElementById('did-sn2').className = 'did-step-num';
+  document.getElementById('did-auth-btn').disabled = false;
+  document.getElementById('did-auth-btn').innerHTML = '📱 모바일 신분증으로 인증하기';
+  document.getElementById('oacx-qr-box').classList.add('hidden');
+  _didPendingToken = null;
+}
+
+/** 상태 배지 업데이트 */
+function setDidStatus(type, icon, text) {
+  const badge = document.getElementById('did-status-badge');
+  badge.className = 'did-status ds-' + type;
+  document.getElementById('did-status-icon').textContent = icon;
+  document.getElementById('did-status-text').textContent = text;
+}
+
+/**
+ * OmniOne CX 모바일 신분증 인증 시작.
+ * oacx-vendor.js를 동적으로 로드한 뒤 OACX.LOAD_MODULE()을 호출합니다.
+ *
+ * OACX.LOAD_MODULE(configUrl, params, callback) — 가이드북 25페이지
+ *   configUrl : OmniOne CX 설정 URL (행사 당일 발급된 값으로 교체)
+ *   params    : 서비스 식별 파라미터 (trcode 등 행사 가이드 참고)
+ *   callback  : 인증 완료 시 호출 — res.token 포함
+ */
+async function startDidAuth() {
+  const btn = document.getElementById('did-auth-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> SDK 로딩 중...';
+  setDidStatus('loading', '⏳', 'OmniOne CX 연결 중...');
+  document.getElementById('did-sn2').className = 'did-step-num active';
+
+  // OACX vendor.js 동적 로드 (이미 로드됐으면 스킵)
+  if (!_didOacxLoaded) {
+    try {
+      await loadScript('https://cx.raonsecure.co.kr:17543/ent/esign/oacx-vendor.js');
+      _didOacxLoaded = true;
+    } catch (e) {
+      // SDK 로드 실패 = 네트워크 없거나 행사 서버 미접속 상태
+      setDidStatus('fail', '❌', 'SDK 로드 실패 — 테스트 인증을 사용하세요');
+      btn.disabled = false;
+      btn.innerHTML = '📱 모바일 신분증으로 인증하기';
+      toast('err', 'OACX SDK 로드 실패. 테스트 인증(Mock)을 사용해 주세요.');
+      return;
+    }
+  }
+
+  // QR 컨테이너 표시
+  const qrBox = document.getElementById('oacx-qr-box');
+  qrBox.classList.remove('hidden');
+  qrBox.innerHTML = '<span class="spin"></span><span style="font-size:.8rem">QR 코드 생성 중...</span>';
+  btn.innerHTML = '📱 QR 스캔 대기 중...';
+  setDidStatus('loading', '⏳', '모바일 신분증 앱으로 QR을 스캔해 주세요');
+
+  try {
+    // ── OACX.LOAD_MODULE 호출 ──────────────────────────────
+    // configUrl: 행사 당일 제공되는 서비스 설정 URL
+    //   예) "https://cx.raonsecure.co.kr:17543/ent/esign/config/HACKATHON2026"
+    // params: 해커톤 가이드북 참고 (trcode, orgCode 등)
+    // ─────────────────────────────────────────────────────
+    OACX.LOAD_MODULE(
+      null,  // configUrl — 행사 당일 실제 URL로 교체
+      {
+        // 해커톤 참가 시 발급받은 서비스 코드로 교체
+        trcode: 'RAS001',
+        // QR 코드를 렌더링할 DOM 요소 ID
+        targetId: 'oacx-qr-box'
+      },
+      function(res) {
+        // ── OACX 콜백 처리 ─────────────────────────────
+        // res.resultCode === '200' 또는 res.code === '200' 이면 성공
+        // res.token 에 OmniOne trans API에 전달할 토큰이 담겨 있음
+        const code   = res.resultCode || res.code || '';
+        const token  = res.token || (res.data && res.data.token) || '';
+
+        if ((code === '200' || code === '0') && token) {
+          qrBox.classList.add('hidden');
+          handleOacxSuccess(token);
+        } else if (code === '400' || code === '401') {
+          setDidStatus('fail', '❌', '인증이 취소되었습니다');
+          resetDidUi();
+          toast('err', '모바일 신분증 인증이 취소됐습니다.');
+        } else {
+          // 알 수 없는 응답 코드 — 토큰이 있으면 진행 시도
+          if (token) {
+            handleOacxSuccess(token);
+          } else {
+            setDidStatus('fail', '❌', '인증 실패 (코드: ' + code + ')');
+            resetDidUi();
+            toast('err', 'OmniOne CX 인증 실패. 코드: ' + code);
+          }
+        }
+      }
+    );
+  } catch (e) {
+    setDidStatus('fail', '❌', 'OACX 오류 — 테스트 인증을 사용하세요');
+    qrBox.classList.add('hidden');
+    btn.disabled = false;
+    btn.innerHTML = '📱 모바일 신분증으로 인증하기';
+    toast('err', 'OACX 오류: ' + e.message);
+  }
+}
+
+/**
+ * OACX 인증 성공 후 처리 — 토큰을 받아 백엔드 검증 호출.
+ * @param {string} oacxToken  OACX 콜백에서 받은 res.token
+ */
+async function handleOacxSuccess(oacxToken) {
+  setDidStatus('loading', '⏳', 'DID 검증 중...');
+  document.getElementById('did-sn1').className = 'did-step-num done';
+  document.getElementById('did-sn2').className = 'did-step-num done';
+  await submitDidVerify(oacxToken);
+}
+
+/**
+ * Mock 인증 — 실제 OACX 없이 임의 토큰으로 백엔드 호출.
+ * backend mock-mode: true 설정 시 임의 토큰 → 더미 DID 생성.
+ */
+async function mockDidAuth() {
+  setDidStatus('loading', '⏳', 'Mock 인증 처리 중...');
+  // 결정론적 더미 토큰 (타임스탬프 포함 → 매번 고유 DID 생성)
+  const mockToken = 'MOCK-' + Date.now() + '-' + Math.random().toString(36).substring(2, 8);
+  toast('info', '🧪 Mock 인증 토큰 생성: ' + mockToken.substring(0, 20) + '...');
+  await submitDidVerify(mockToken);
+}
+
+/**
+ * POST /api/auth/did-verify — OACX 토큰 + 사용자 정보를 백엔드에 전송.
+ * 성공 시 onAuthSuccess()로 로그인 완료 처리.
+ * @param {string} oacxToken  OACX 콜백 토큰 또는 mock 토큰
+ */
+async function submitDidVerify(oacxToken) {
+  const nickname = (document.getElementById('did-nickname').value.trim()) || '사용자';
+  const role     = document.getElementById('did-role').value;
+  const sd       = document.getElementById('did-sd').value.trim() || null;
+
+  try {
+    const data = await api('POST', '/auth/did-verify', {
+      oacxToken,
+      nickname,
+      role,
+      serviceDescription: sd
+    });
+
+    setDidStatus('ok', '✅', data.isNewMember ? '신규 가입 완료!' : '기존 회원 로그인 성공!');
+    toast('ok', data.isNewMember
+      ? '모바일 신분증으로 가입 완료! 🎉 DID: ' + (data.did || '발급됨')
+      : '모바일 신분증으로 로그인됐습니다!');
+
+    // 0.5초 후 앱 진입 (상태 표시 잠깐 보여주기)
+    setTimeout(() => onAuthSuccess(data), 500);
+
+  } catch (err) {
+    setDidStatus('fail', '❌', '인증 실패');
+    resetDidUi();
+    toast('err', 'DID 인증 실패: ' + err.message);
+  }
+}
+
+/**
+ * 외부 스크립트를 동적으로 로드합니다.
+ * @param {string} src  로드할 스크립트 URL
+ * @returns {Promise}   로드 완료 시 resolve, 실패 시 reject
+ */
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    // 이미 로드된 스크립트 중복 방지
+    if (document.querySelector('script[src="' + src + '"]')) {
+      resolve(); return;
+    }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('스크립트 로드 실패: ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+function onAuthSuccess(d) {
+  token = d.accessToken;
+  user = {id:d.memberId, nickname:d.nickname, region:d.region, role:d.role,
+          serviceDescription:d.serviceDescription,
+          averageSentimentScore:d.averageSentimentScore, sentimentCount:d.sentimentCount};
+  localStorage.setItem('nv_tok', token);
+  localStorage.setItem('nv_u', JSON.stringify(user));
+  document.getElementById('nav').classList.remove('hidden');
+  toast('ok', user.nickname+'님 환영합니다! 🎉');
+  goto('map');
+}
+
+async function doEmailLogin(e) {
+  e.preventDefault();
+  const f = e.target, bt = document.getElementById('lbt-login');
+  bt.innerHTML = '<span class="spin"></span>';
+  try {
+    onAuthSuccess(await api('POST', '/auth/login', {email: f.email.value.trim(), password: f.password.value}));
+  } catch(err) {
+    toast('err', err.message);
+  } finally { bt.textContent = '로그인'; }
+}
+
+async function doRegister(e) {
+  e.preventDefault();
+  const f = e.target, bt = document.getElementById('lbt-reg');
+  bt.innerHTML = '<span class="spin"></span>';
+  try {
+    onAuthSuccess(await api('POST', '/auth/register', {
+      email: f.email.value.trim(),
+      password: f.password.value,
+      nickname: f.nickname.value.trim(),
+      role: f.role.value,
+      serviceDescription: f.sd.value.trim() || null
+    }));
+  } catch(err) {
+    toast('err', err.message.includes('null') ? '이미 사용 중인 이메일입니다.' : err.message);
+  } finally { bt.textContent = '가입하기'; }
+}
+
+function logout() {
+  localStorage.removeItem('nv_tok'); localStorage.removeItem('nv_u');
+  token = null; user = null;
+  document.getElementById('nav').classList.add('hidden');
+  document.querySelectorAll('[id^="pg-"]').forEach(e => e.classList.add('hidden'));
+  document.getElementById('pg-login').classList.remove('hidden');
+  toast('info', '로그아웃 되었습니다.');
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────
+async function loadDashboard() {
+  if (!user) return;
+  document.getElementById('d-nick').textContent = user.nickname;
+  document.getElementById('d-role').innerHTML = roleBadge(user.role);
+  document.getElementById('d-avg').textContent = parseFloat(user.averageSentimentScore||0).toFixed(2);
+  document.getElementById('d-rvc').textContent = user.sentimentCount||0;
+  document.getElementById('d-sd').textContent = user.serviceDescription||'-';
+  try {
+    const ms = await api('GET', '/matching/my');
+    document.getElementById('d-mc').textContent = ms.length;
+    document.getElementById('d-cc').textContent = ms.filter(m=>m.status==='COMPLETED').length;
+  } catch(e) { document.getElementById('d-mc').textContent='-'; document.getElementById('d-cc').textContent='-'; }
+}
+
+// ── BROWSE ────────────────────────────────────────────────────
+async function loadMembers() {
+  const g = document.getElementById('mg');
+  g.innerHTML = loading();
+  try {
+    const ms = await api('GET', '/members');
+    const others = ms.filter(m => m.id !== user?.id);
+    g.innerHTML = others.length ? others.map(memberCard).join('') : empty('👥','아직 다른 회원이 없습니다.');
+  } catch(err) { g.innerHTML = empty('⚠️', err.message); }
+}
+
+function memberCard(m) {
+  const em = ['🎯','💡','🚀','⚡','🎨','🔥','✨','🌟'][m.id%8];
+  const avg = parseFloat(m.averageSentimentScore||0).toFixed(1);
+  return `<div class="card mc" onclick="openReqModal(${m.id},'${esc(m.serviceDescription||'')}','${esc(m.nickname)}')">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="av">${em}</div>
+      <div style="flex:1;min-width:0"><div class="mn">${esc(m.nickname)}</div><div class="mr">📍 ${esc(m.region||'지역 미설정')}</div></div>
+    </div>
+    <div class="md">${esc(m.serviceDescription||'서비스 설명 없음')}</div>
+    <div class="mf">${roleBadge(m.role)}<div class="rat"><span class="stars" style="font-size:.82rem">${stars(parseFloat(avg))}</span><span class="rat-n">${avg}</span><span class="rat-c">(${m.sentimentCount||0})</span></div></div>
+  </div>`;
+}
+
+function openReqModal(id, sd, nick) {
+  reqTargetId = id;
+  document.getElementById('req-target').textContent = nick+': '+(sd||'미작성');
+  document.getElementById('req-svc').value = '';
+  document.getElementById('req-at').value = '';
+  document.getElementById('m-req').classList.remove('hidden');
+}
+
+async function submitReq() {
+  const svc = document.getElementById('req-svc').value.trim();
+  if (!svc) { toast('err','제공할 서비스를 입력하세요.'); return; }
+  const at = document.getElementById('req-at').value;
+  try {
+    await api('POST', '/matching/request', {requesteeId:reqTargetId, serviceOfferedByRequester:svc, scheduledAt:at?at+':00':null});
+    cm('m-req'); toast('ok','교환 요청을 보냈습니다!'); goto('matches');
+  } catch(err) { toast('err', err.message); }
+}
+
+// ── MATCHES ───────────────────────────────────────────────────
+async function loadMatches() {
+  const l = document.getElementById('ml');
+  l.innerHTML = loading();
+  try {
+    const ms = await api('GET', '/matching/my');
+    l.innerHTML = ms.length ? ms.map(matchItem).join('') : empty('📋','아직 매칭이 없습니다. 회원 찾기에서 교환을 시작해 보세요!');
+  } catch(err) { l.innerHTML = empty('⚠️', err.message); }
+}
+
+function matchItem(m) {
+  const iR = m.requesterId === user?.id;
+  const other = iR ? m.requesteeNickname : m.requesterNickname;
+  const arrow = iR ? '→' : '←';
+  return `<div class="card mi" onclick="openDetail(${m.matchingId})">
+    <div class="mih"><div class="mip">${esc(user?.nickname)} ${arrow} ${esc(other)}</div>${statusBadge(m.status)}</div>
+    <div class="mis">${iR?'내가 제공: ':'상대 제공: '}${esc(m.serviceOfferedByRequester||'-')}</div>
+    <div class="mim">
+      <span>📅 ${fd(m.createdAt)}</span>
+      ${m.scheduledAt?`<span>🕐 ${fd(m.scheduledAt)}</span>`:''}
+      ${m.status==='COMPLETED'?`<span>⭐ 평가 ${m.submittedSentimentsCount}/2</span>`:''}
+    </div>
+  </div>`;
+}
+
+// ── MATCH DETAIL ──────────────────────────────────────────────
+async function openDetail(id) {
+  goto('match-detail');
+  const c = document.getElementById('mdc');
+  c.innerHTML = `<div style="color:var(--text2);text-align:center;padding:48px">${loading()}</div>`;
+  try { renderDetail(await api('GET', '/matching/'+id)); }
+  catch(err) { c.innerHTML = empty('⚠️', err.message); }
+}
+
+function renderDetail(m) {
+  const iR = m.requesterId === user?.id, iE = m.requesteeId === user?.id;
+  let acts = '<div class="acts">';
+  if (iE && m.status==='REQUESTED')
+    acts += `<button class="btn btn-ok" onclick="openAccModal(${m.matchingId})">✅ 수락하기</button>`;
+  if ((iR||iE) && m.status==='ACCEPTED')
+    acts += `<button class="btn btn-p" onclick="doComplete(${m.matchingId})">🏁 교환 완료</button>`;
+  if ((iR||iE) && !['COMPLETED','CANCELLED'].includes(m.status))
+    acts += `<button class="btn btn-bad" onclick="doCancel(${m.matchingId})">✖ 취소</button>`;
+  if (m.status==='COMPLETED' && m.submittedSentimentsCount < 2)
+    acts += `<button class="btn btn-pu" onclick="openEvalModal(${m.matchingId})">⭐ 평가하기</button>`;
+  acts += '</div>';
+
+  document.getElementById('mdc').innerHTML = `
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+        <h3 style="font-size:1.15rem">매칭 #${m.matchingId}</h3>${statusBadge(m.status)}
+      </div>
+      <div class="dg">
+        <div><div class="dl">요청자</div><div class="dv">${esc(m.requesterNickname)} ${iR?'(나)':''}</div><div style="font-size:.78rem;color:var(--text2);margin-top:3px">${esc(m.requesterServiceDescription||'-')}</div></div>
+        <div><div class="dl">수신자</div><div class="dv">${esc(m.requesteeNickname)} ${iE?'(나)':''}</div><div style="font-size:.78rem;color:var(--text2);margin-top:3px">${esc(m.requesteeServiceDescription||'-')}</div></div>
+        <div><div class="dl">요청자 제공</div><div class="dv">${esc(m.serviceOfferedByRequester||'-')}</div></div>
+        <div><div class="dl">수신자 제공</div><div class="dv">${esc(m.serviceOfferedByRequestee||'수락 전')}</div></div>
+        <div><div class="dl">교환 예정</div><div class="dv">${m.scheduledAt?fd(m.scheduledAt):'-'}</div></div>
+        <div><div class="dl">완료 일시</div><div class="dv">${m.completedAt?fd(m.completedAt):'-'}</div></div>
+      </div>
+      ${m.status==='COMPLETED'?`<div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:9px;padding:10px;margin-bottom:14px;font-size:.83rem;color:#6ee7b7">✅ 교환 완료 · 평가 ${m.submittedSentimentsCount}/2 제출됨</div>`:''}
+      ${acts}
+    </div>`;
+}
+
+function openAccModal(id) {
+  accMatchId = id;
+  document.getElementById('acc-svc').value = '';
+  document.getElementById('m-acc').classList.remove('hidden');
+}
+async function submitAcc() {
+  const svc = document.getElementById('acc-svc').value.trim();
+  if (!svc) { toast('err','제공할 서비스를 입력하세요.'); return; }
+  try {
+    await api('PUT', '/matching/'+accMatchId+'/accept', {serviceOfferedByRequestee:svc});
+    cm('m-acc'); toast('ok','수락했습니다!'); openDetail(accMatchId);
+  } catch(err) { toast('err', err.message); }
+}
+async function doComplete(id) {
+  if (!confirm('교환이 실제로 완료됐나요? 완료 처리 후 상호 평가가 가능합니다.')) return;
+  try { await api('PUT', '/matching/'+id+'/complete'); toast('ok','완료! 이제 상대방을 평가해 주세요.'); openDetail(id); }
+  catch(err) { toast('err', err.message); }
+}
+async function doCancel(id) {
+  if (!confirm('이 매칭을 취소하시겠습니까?')) return;
+  try { await api('PUT', '/matching/'+id+'/cancel'); toast('info','취소됐습니다.'); goto('matches'); }
+  catch(err) { toast('err', err.message); }
+}
+
+// ── EVALUATE ──────────────────────────────────────────────────
+function openEvalModal(id) {
+  evalMatchId = id; evalScore = 0;
+  document.getElementById('eval-c').value = '';
+  updStars(0);
+  document.getElementById('m-eval').classList.remove('hidden');
+}
+document.getElementById('ss').addEventListener('click', e => {
+  const v = e.target.dataset.v; if (v) { evalScore = parseInt(v); updStars(evalScore); }
+});
+document.getElementById('ss').addEventListener('mouseover', e => { const v = e.target.dataset.v; if (v) updStars(parseInt(v)); });
+document.getElementById('ss').addEventListener('mouseout', () => updStars(evalScore));
+function updStars(n) {
+  document.querySelectorAll('#ss span').forEach((s,i) => s.classList.toggle('on', i<n));
+}
+async function submitEval() {
+  if (!evalScore) { toast('err','평점을 선택해 주세요.'); return; }
+  const c = document.getElementById('eval-c').value.trim();
+  try {
+    await api('POST', '/sentiment/submit', {matchingId:evalMatchId, score:evalScore, comment:c});
+    cm('m-eval');
+    toast('ok','평가 제출 완료! SHA-256 무결성 해시 + OmniOne Chain 앵커링 처리 중 ⛓️');
+    openDetail(evalMatchId);
+    refreshMe();
+  } catch(err) { toast('err', err.message); }
+}
+async function refreshMe() {
+  try {
+    const me = await api('GET', '/members/me');
+    user.averageSentimentScore = me.averageSentimentScore;
+    user.sentimentCount = me.sentimentCount;
+    localStorage.setItem('nv_u', JSON.stringify(user));
+  } catch(e) {}
+}
+
+// ── REVIEWS ───────────────────────────────────────────────────
+async function loadReviews() {
+  if (!user) return;
+  const l = document.getElementById('rl');
+  l.innerHTML = loading();
+  try {
+    const rs = await api('GET', '/sentiment/received/'+user.id);
+    l.innerHTML = rs.length ? rs.map(reviewCard).join('') : empty('⭐','아직 받은 평가가 없습니다. 서비스 교환을 완료하면 평가를 받을 수 있어요.');
+  } catch(err) { l.innerHTML = empty('⚠️', err.message); }
+}
+function reviewCard(r) {
+  return `<div class="card rv">
+    <div class="rvh"><div class="rvr">👤 ${esc(r.reviewerNickname||'익명')}</div><div class="stars">${stars(r.score)}</div></div>
+    ${r.comment?`<div class="rvc">"${esc(r.comment)}"</div>`:''}
+    <div class="rvm">📅 ${fd(r.createdAt)} · 🔐 SHA-256: <span style="font-family:monospace;font-size:.7rem;color:#666">${(r.integrityHash||'').substring(0,20)}...</span></div>
+  </div>`;
+}
+
+// ── HELPERS ───────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function stars(n) { const x=Math.round(n||0); return '★'.repeat(x)+'☆'.repeat(5-x); }
+function roleBadge(r) {
+  const m={PROVIDER:['b-pv','제공자'],RECEIVER:['b-rc','수혜자'],BOTH:['b-bt','양방향']};
+  const [c,l]=m[r]||['b-bt',r]; return `<span class="badge ${c}">${l}</span>`;
+}
+function statusBadge(s) {
+  const m={REQUESTED:['b-rq','요청됨'],ACCEPTED:['b-ac','수락됨'],COMPLETED:['b-cp','완료'],CANCELLED:['b-cx','취소됨']};
+  const [c,l]=m[s]||['b-cx',s]; return `<span class="badge ${c}">${l}</span>`;
+}
+function fd(s) {
+  if (!s) return '-';
+  return new Date(s).toLocaleDateString('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function empty(icon, msg) { return `<div class="empty"><div class="ei">${icon}</div><p>${msg}</p></div>`; }
+function loading() { return '<div style="color:var(--text2);padding:20px;text-align:center"><span class="spin"></span> 로딩 중...</div>'; }
+function toast(type, msg) {
+  const d = document.createElement('div');
+  d.className = `toast t-${type}`; d.textContent = msg;
+  document.getElementById('tc').appendChild(d);
+  setTimeout(() => d.remove(), 4200);
+}
+
+// ── INIT ──────────────────────────────────────────────────────
+if (token && user) {
+  document.getElementById('pg-login').classList.add('hidden');
+  document.getElementById('nav').classList.remove('hidden');
+  goto('map');
+}
+</script>
+</body>
+</html>

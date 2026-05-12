@@ -1,0 +1,10 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "./gradlew bootJar -x test"
+
+[deploy]
+startCommand = "java -Dspring.profiles.active=prod -jar build/libs/realmap-0.0.1-SNAPSHOT.jar"
+healthcheckPath = "/api/pins"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

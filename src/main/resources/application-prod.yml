@@ -1,0 +1,57 @@
+# ============================================================
+# 운영(Railway) 환경 설정 - spring.profiles.active=prod
+# 환경변수는 Railway 대시보드 Variables 탭에서 설정
+# ============================================================
+
+spring:
+  main:
+    web-application-type: servlet
+
+  # Railway MySQL 플러그인이 자동으로 MYSQL_* 환경변수를 주입함
+  datasource:
+    url: jdbc:mysql://${MYSQLHOST}:${MYSQLPORT}/${MYSQLDATABASE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${MYSQLUSER}
+    password: ${MYSQLPASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  # H2 콘솔 운영에서 비활성화
+  h2:
+    console:
+      enabled: false
+
+server:
+  port: ${PORT:8080}
+
+naver:
+  map:
+    client-id: 7ekmq3skek
+
+jwt:
+  secret: ${JWT_SECRET}
+  expiration-ms: 86400000
+
+omnione:
+  cx:
+    trans-api-url: https://cx.raonsecure.co.kr:18543/oacx/api/v1.0/trans
+    api-key: ${OMNIONE_CX_API_KEY:PLACEHOLDER}
+    mock-mode: ${OMNIONE_MOCK_MODE:false}
+  chain:
+    rpc-url: ${OMNIONE_CHAIN_RPC_URL:https://chain.omnione.net/rpc}
+    api-key: ${OMNIONE_CHAIN_API_KEY:PLACEHOLDER}
+    contract-address: ${OMNIONE_CONTRACT_ADDRESS:0x0000000000000000000000000000000000000000}
+    private-key: ${OMNIONE_PRIVATE_KEY:0x0000000000000000000000000000000000000000000000000000000000000001}
+    enabled: ${OMNIONE_CHAIN_ENABLED:false}
+    chain-id: 1007
+
+logging:
+  level:
+    com.realmap: INFO
+    org.springframework.security: WARN
